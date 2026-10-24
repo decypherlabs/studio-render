@@ -54,11 +54,11 @@ jobs:
           key: render-${{ inputs.assets }}-v1
           restore-keys: render-
 
-      - name: ffmpeg 7 (static)
+      - name: ffmpeg 8 (static)
         run: |
           if [ ! -x ~/ffmpeg/bin/ffmpeg ]; then
             mkdir -p ~/ffmpeg
-            curl -sSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz \
+            curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz \
               | tar xJ -C ~/ffmpeg --strip-components=1
           fi
           echo "$HOME/ffmpeg/bin" >> "$GITHUB_PATH"
