@@ -36,9 +36,16 @@ jobs:
       max-parallel: 20
       matrix:
         clip: ${{ fromJSON(inputs.clips) }}
+    services:
+      # PO-token provider for yt-dlp: makes the runner's YouTube requests look like a real browser
+      pot:
+        image: brainicism/bgutil-ytdlp-pot-provider
+        ports:
+          - 4416:4416
     env:
       GH_TOKEN: ${{ github.token }}
       JOB: ${{ inputs.job }}
+      STUDIO_RUNNER: "1"
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -77,7 +84,20 @@ jobs:
           cp -R ~/assets/clipper/. clipper/
 
       - name: Python packages
-        run: pip install -q -r work/clipper/requirements-render.txt
+        run: |
+          pip install -q -r work/clipper/requirements-render.txt
+          pip install -q -U "yt-dlp[default]" bgutil-ytdlp-pot-provider   # always current: YouTube changes often
+
+      - name: YouTube access (cookies of a throwaway account, if set)
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+        run: |
+          args="--js-runtimes node"
+          if [ -n "$YT_COOKIES" ]; then
+            printf '%s\n' "$YT_COOKIES" > "$RUNNER_TEMP/cookies.txt"
+            args="$args --cookies $RUNNER_TEMP/cookies.txt"
+          fi
+          echo "STUDIO_YTDLP_ARGS=$args" >> "$GITHUB_ENV"
 
       - name: Render clip ${{ matrix.clip }}
         working-directory: work
