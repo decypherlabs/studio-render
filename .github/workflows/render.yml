@@ -46,6 +46,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       JOB: ${{ inputs.job }}
       STUDIO_RUNNER: "1"
+      STUDIO_YTDLP_DEBUG: "1"
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -92,7 +93,8 @@ jobs:
         env:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
         run: |
-          args="--js-runtimes node"
+          # mobile-web client: its streams take the PO token from the bgutil sidecar (datacenter IPs)
+          args="--js-runtimes node --extractor-args youtube:player_client=mweb"
           if [ -n "$YT_COOKIES" ]; then
             printf '%s\n' "$YT_COOKIES" > "$RUNNER_TEMP/cookies.txt"
             args="$args --cookies $RUNNER_TEMP/cookies.txt"
