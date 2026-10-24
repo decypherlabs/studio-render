@@ -93,8 +93,8 @@ jobs:
         env:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
         run: |
-          # mobile-web client: its streams take the PO token from the bgutil sidecar (datacenter IPs)
-          args="--js-runtimes node --extractor-args youtube:player_client=mweb"
+          # yt-dlp's default clients (1080p); mweb only served 360p. The bgutil sidecar supplies PO tokens.
+          args="--js-runtimes node"
           if [ -n "$YT_COOKIES" ]; then
             printf '%s\n' "$YT_COOKIES" > "$RUNNER_TEMP/cookies.txt"
             args="$args --cookies $RUNNER_TEMP/cookies.txt"
