@@ -1,0 +1,87 @@
+# Evolve Better Studio render farm. Installed into a render repo as .github/workflows/render.yml
+# by the dashboard (Accounts -> Render on GitHub -> Install workflow); edit the copy in
+# studio/render-workflow.yml and reinstall, not the repo copy.
+#
+# The Mac uploads a job to the release `job-<id>` (code.tar.gz + clip-<n>.tar per clip) and the
+# shared assets to `assets-<hash>` once, then dispatches this workflow. One runner per clip
+# renders it and uploads out-<n>.tar back to the job release. Runners get no channel secrets.
+name: render
+run-name: ${{ inputs.job }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: job release tag (job-...)
+        required: true
+        type: string
+      clips:
+        description: JSON array of clip ids
+        required: true
+        type: string
+      assets:
+        description: assets release hash (fonts, models, music)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  clip:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        clip: ${{ fromJSON(inputs.clips) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      JOB: ${{ inputs.job }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore ffmpeg, pip and assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/ffmpeg
+            ~/.cache/pip
+            ~/assets
+          key: render-${{ inputs.assets }}-v1
+          restore-keys: render-
+
+      - name: ffmpeg 7 (static)
+        run: |
+          if [ ! -x ~/ffmpeg/bin/ffmpeg ]; then
+            mkdir -p ~/ffmpeg
+            curl -sSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz \
+              | tar xJ -C ~/ffmpeg --strip-components=1
+          fi
+          echo "$HOME/ffmpeg/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch code, assets and this clip
+        run: |
+          mkdir -p work && cd work
+          gh release download "$JOB" -R "$GITHUB_REPOSITORY" -p code.tar.gz -p "clip-${{ matrix.clip }}.tar"
+          tar xzf code.tar.gz && tar xf "clip-${{ matrix.clip }}.tar"
+          if [ ! -f ~/assets/${{ inputs.assets }}.ok ]; then
+            rm -rf ~/assets && mkdir -p ~/assets
+            gh release download "assets-${{ inputs.assets }}" -R "$GITHUB_REPOSITORY" -p assets.tar -D ~/assets
+            tar xf ~/assets/assets.tar -C ~/assets && rm ~/assets/assets.tar && touch ~/assets/${{ inputs.assets }}.ok
+          fi
+          cp -R ~/assets/clipper/. clipper/
+
+      - name: Python packages
+        run: pip install -q -r work/clipper/requirements-render.txt
+
+      - name: Render clip ${{ matrix.clip }}
+        working-directory: work
+        run: python clipper/remote_render.py "${{ matrix.clip }}"
+
+      - name: Return the result
+        working-directory: work
+        run: gh release upload "$JOB" "out-${{ matrix.clip }}.tar" -R "$GITHUB_REPOSITORY" --clobber
