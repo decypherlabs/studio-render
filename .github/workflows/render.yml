@@ -50,8 +50,9 @@ jobs:
           path: |
             ~/ffmpeg
             ~/.cache/pip
+            ~/.cache/huggingface
             ~/assets
-          key: render-${{ inputs.assets }}-v1
+          key: render-${{ inputs.assets }}-v2
           restore-keys: render-
 
       - name: ffmpeg 8 (static)
