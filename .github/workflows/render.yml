@@ -105,6 +105,13 @@ jobs:
         working-directory: work
         run: python clipper/remote_render.py "${{ matrix.clip }}"
 
-      - name: Return the result
+      - name: Return the result (artifact, fast download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: out-${{ matrix.clip }}
+          path: work/out-${{ matrix.clip }}.tar
+          retention-days: 1
+          compression-level: 0
+      - name: Return the result (release, fallback)
         working-directory: work
         run: gh release upload "$JOB" "out-${{ matrix.clip }}.tar" -R "$GITHUB_REPOSITORY" --clobber
