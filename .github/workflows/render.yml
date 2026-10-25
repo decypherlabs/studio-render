@@ -47,6 +47,7 @@ jobs:
       JOB: ${{ inputs.job }}
       STUDIO_RUNNER: "1"
       STUDIO_YTDLP_DEBUG: "1"
+      PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}   # B-roll cutaways (clipper/broll.py)
     steps:
       - uses: actions/setup-python@v5
         with:
