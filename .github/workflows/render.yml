@@ -5,6 +5,8 @@
 # The Mac uploads a job to the release `job-<id>` (code.tar.gz + clip-<n>.tar per clip) and the
 # shared assets to `assets-<hash>` once, then dispatches this workflow. One runner per clip
 # renders it and uploads out-<n>.tar back to the job release. Runners get no channel secrets.
+# The repo is public (unlimited free minutes); job/asset releases are drafts (only writers see them) and
+# YouTube debug logging is off, so nothing private shows in public logs.
 name: render
 run-name: ${{ inputs.job }}
 
@@ -46,7 +48,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       JOB: ${{ inputs.job }}
       STUDIO_RUNNER: "1"
-      STUDIO_YTDLP_DEBUG: "1"
       PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}   # B-roll cutaways (clipper/broll.py)
     steps:
       - uses: actions/setup-python@v5
@@ -75,12 +76,19 @@ jobs:
 
       - name: Fetch code, assets and this clip
         run: |
+          # draft releases have no tag: find them by name, fetch assets through the API
+          dl() {  # dl <release name> <asset name> <dest>
+            rel=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.name==\"$1\") | .id" | head -1)
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases/$rel/assets?per_page=100" --jq ".[] | select(.name==\"$2\") | .id")
+            gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$3"
+          }
           mkdir -p work && cd work
-          gh release download "$JOB" -R "$GITHUB_REPOSITORY" -p code.tar.gz -p "clip-${{ matrix.clip }}.tar"
+          dl "$JOB" code.tar.gz code.tar.gz
+          dl "$JOB" "clip-${{ matrix.clip }}.tar" "clip-${{ matrix.clip }}.tar"
           tar xzf code.tar.gz && tar xf "clip-${{ matrix.clip }}.tar"
           if [ ! -f ~/assets/${{ inputs.assets }}.ok ]; then
             rm -rf ~/assets && mkdir -p ~/assets
-            gh release download "assets-${{ inputs.assets }}" -R "$GITHUB_REPOSITORY" -p assets.tar -D ~/assets
+            dl "assets-${{ inputs.assets }}" assets.tar ~/assets/assets.tar
             tar xf ~/assets/assets.tar -C ~/assets && rm ~/assets/assets.tar && touch ~/assets/${{ inputs.assets }}.ok
           fi
           cp -R ~/assets/clipper/. clipper/
@@ -115,4 +123,10 @@ jobs:
           compression-level: 0
       - name: Return the result (release, fallback)
         working-directory: work
-        run: gh release upload "$JOB" "out-${{ matrix.clip }}.tar" -R "$GITHUB_REPOSITORY" --clobber
+        run: |
+          rel=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.name==\"$JOB\") | .id" | head -1)
+          f="out-${{ matrix.clip }}.tar"
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$rel/assets?per_page=100" --jq ".[] | select(.name==\"$f\") | .id")
+          [ -n "$old" ] && gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/octet-stream" \
+            --data-binary "@$f" "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$rel/assets?name=$f" > /dev/null
